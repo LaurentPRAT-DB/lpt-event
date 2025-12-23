@@ -1,0 +1,157 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+**lpt-event** is a full-stack event management application built with the `apx` framework (https://github.com/databricks-solutions/apx) designed to deploy on Databricks. The application follows a modern architecture with:
+
+- **Backend**: Python + FastAPI + SQLModel
+- **Frontend**: React + TanStack Router + shadcn/ui + Tailwind CSS
+- **Database**: Databricks Postgres (with SQLite in-memory fallback for local development)
+- **API Client**: Frontend uses custom React Query hooks in `src/sensor_magic/ui/lib/api.ts`
+
+## Development Commands
+
+### Starting Development
+
+```bash
+# Start all development servers (backend, frontend, OpenAPI watcher)
+uv run apx dev start
+
+# View logs from all servers
+uv run apx dev logs
+
+# Stream logs in real-time
+uv run apx dev logs -f
+
+# Check server status
+uv run apx dev status
+
+# Stop all servers
+uv run apx dev stop
+```
+
+### Code Quality
+
+```bash
+# Run type checking and linting for both TypeScript and Python
+uv run apx dev check
+```
+
+### Building
+
+```bash
+# Create production build
+uv run apx build
+```
+
+### Deployment
+
+```bash
+# Deploy to Databricks
+databricks bundle deploy -p <your-profile>
+```
+
+## Architecture
+
+### Backend Structure
+
+The backend lives in `src/lpt_event/backend/` and follows this organization:
+
+- **app.py**: FastAPI application entry point with lifespan management
+  - Mounts static files from the built frontend
+  - Includes API router at `/api` prefix
+  - Important: API routes must be included BEFORE mounting static files for correct routing
+- **config.py**: Configuration using pydantic-settings
+  - Reads from `.env` file at project root
+  - Uses `LPT_EVENT_` prefix for environment variables
+  - Supports nested config with `__` delimiter (e.g., `LPT_EVENT_DB__INSTANCE_NAME`)
+- **runtime.py**: Database connection and initialization
+  - Supports both Databricks Postgres and SQLite (set instance name to `sqlite-memory`)
+  - Handles credential generation for Databricks via workspace client
+  - Seeds demo data on first run
+- **models.py**: SQLModel + Pydantic models
+  - Separate table models (Event) from I/O models (EventCreate, EventRead)
+  - Uses SQLModel for tables, pure Pydantic for API payloads to support richer types
+- **router.py**: API endpoints
+  - All routes prefixed with `/api`
+  - Uses FastAPI dependency injection for database sessions
+- **dependencies.py**: Shared FastAPI dependencies
+
+### Frontend Structure
+
+The frontend lives in `src/lpt_event/ui/` and follows this organization:
+
+- **main.tsx**: Application entry point
+  - Configures TanStack Router with auto-generated route tree
+  - Provides QueryClient for React Query
+  - Disables preload staleness to ensure loader calls are always fresh
+- **routes/**: File-based routing via TanStack Router
+  - `__root.tsx`: Root layout
+  - `index.tsx`: Homepage
+  - `_sidebar/`: Nested routes with sidebar layout
+- **components/**: React components
+  - `ui/`: shadcn/ui components
+  - `apx/`: APX framework components (navbar, sidebar, theme toggle)
+  - `backgrounds/`: Visual components
+- **lib/api.ts**: API client using React Query
+  - Custom hooks: `useEventsQuery`, `useEventQuery`, `useCreateEventMutation`
+  - All API calls go through `/api` prefix (proxied in dev, served by FastAPI in prod)
+  - Uses `useSuspenseQuery` for current user to enable loading boundaries
+
+### Configuration Flow
+
+1. `pyproject.toml` contains `[tool.apx.metadata]` section with app name, slug, and module path
+2. `vite.config.ts` reads this metadata to configure build paths and aliases
+3. In dev mode, Vite proxies `/api/*` requests to the backend server
+4. In production, FastAPI serves the built static files from `src/lpt_event/__dist__/`
+
+### Database Configuration
+
+- Production: Uses Databricks Postgres configured via `databricks.yml`
+  - Credentials generated dynamically via `ws.database.generate_database_credential()`
+  - Connection pool with 45-minute recycle time
+- Development: Set `LPT_EVENT_DB__INSTANCE_NAME=sqlite-memory` for in-memory SQLite
+
+### Build and Deployment
+
+- `uv run apx build` creates the production bundle in `.build/`
+- Frontend assets are built to `src/lpt_event/__dist__/` (included in Python package)
+- `databricks.yml` configures the Databricks app deployment
+  - Uses `uv run apx build` as the artifact build command
+  - Provisions Databricks Postgres instance (LPT-LKB-2)
+  - Grants app permission to connect and create tables
+
+## Key Patterns
+
+### Adding a New API Endpoint
+
+1. Add model classes in `backend/models.py` (table + I/O models)
+2. Add endpoint in `backend/router.py` with proper type hints
+3. Add React Query hook in `ui/lib/api.ts`
+4. Use the hook in React components
+
+### Adding a New Route
+
+1. Create file in `src/lpt_event/ui/routes/` (e.g., `events.tsx`)
+2. Route tree is auto-generated by TanStack Router plugin
+3. Use loaders for data fetching with React Query
+4. Layout routes use underscore prefix (e.g., `_sidebar/`)
+
+### Environment Variables
+
+All app config uses the `LPT_EVENT_` prefix. Examples:
+
+```bash
+LPT_EVENT_DB__INSTANCE_NAME=LPT-LKB-2
+LPT_EVENT_DB__PORT=5432
+LPT_EVENT_DB__DATABASE_NAME=databricks_postgres
+LPT_EVENT_API_PREFIX=/api
+```
+
+### Static Assets
+
+- Frontend assets are built into `src/lpt_event/__dist__/`
+- This directory is included in the Python package via `hatch.build.artifacts`
+- FastAPI mounts this as static files at root `/` after API routes
