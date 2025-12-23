@@ -1,11 +1,50 @@
 from databricks.sdk import WorkspaceClient
-from fastapi import Header
+from fastapi import Header, Request
 from typing import Annotated, Generator
 from sqlmodel import Session
 from sqlalchemy import create_engine, event
+import base64
+import json
 from .runtime import rt
 from .config import conf
 from .logger import logger
+
+
+def _extract_username_from_token(token: str) -> str:
+    """
+    Extract username from JWT token without verification.
+
+    Databricks OBO tokens are JWTs that contain user information in the payload.
+    We don't verify the signature since the token came from Databricks infrastructure.
+    """
+    try:
+        # JWT tokens have format: header.payload.signature
+        parts = token.split('.')
+        if len(parts) != 3:
+            raise ValueError("Invalid JWT format")
+
+        # Decode the payload (second part)
+        # Add padding if needed for base64 decoding
+        payload = parts[1]
+        padding = 4 - len(payload) % 4
+        if padding != 4:
+            payload += '=' * padding
+
+        decoded = base64.urlsafe_b64decode(payload)
+        claims = json.loads(decoded)
+
+        # Try common username claims in order of preference
+        for claim in ['email', 'sub', 'upn', 'preferred_username']:
+            if claim in claims:
+                username = claims[claim]
+                logger.debug(f"Extracted username from token claim '{claim}': {username}")
+                return username
+
+        raise ValueError(f"No username claim found in token. Available claims: {list(claims.keys())}")
+
+    except Exception as e:
+        logger.error(f"Failed to extract username from OBO token: {e}")
+        raise ValueError(f"Could not extract username from OBO token: {e}")
 
 
 def get_obo_ws(
@@ -66,8 +105,12 @@ def get_obo_session(
             yield session
         return
 
+    # Extract username from the OBO token
+    # (We can't call current_user.me() because OBO tokens have limited scopes)
+    username = _extract_username_from_token(token)
+    logger.debug(f"Creating OBO database session for user: {username}")
+
     # Create an on-behalf-of WorkspaceClient for this request
-    logger.debug("Creating OBO database session")
     obo_ws = WorkspaceClient(token=token, auth_type="pat")
 
     # Use the service principal's workspace client to get database instance details
@@ -79,9 +122,6 @@ def get_obo_session(
     host = instance.read_write_dns
     port = conf.db.port
     database = conf.db.database_name
-
-    # Get the username for this OBO user
-    username = obo_ws.current_user.me().user_name
     engine_url = f"{prefix}://{username}:@{host}:{port}/{database}"
 
     # Create a short-lived engine for this request
