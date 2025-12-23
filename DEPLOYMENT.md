@@ -96,16 +96,23 @@ The app will:
 
 ## Security Features
 
-### On-Behalf-Of (OBO) Authentication
-- When users access the app, their identity is passed via `X-Forwarded-Access-Token` header
-- The app creates per-user database connections
-- Each database operation is performed with the user's own credentials
-- Enables proper audit trails and row-level security
-
 ### OAuth2 Authentication
 - Users must authenticate via Databricks OAuth before accessing the app
 - The app automatically redirects unauthenticated users to login
 - Token scopes: `iam.current-user:read`, `iam.access-control:read`
+- User identity extracted from OBO token for application-level audit trails
+
+### Database Authentication
+**Current Implementation**: Service Principal
+- Database connections use the app's service principal credentials
+- All database operations are performed as the service principal
+- User identity is tracked at the application level (extracted from OBO token)
+- Application logs show which user performed each operation
+
+**Note**: True per-user database connections would require:
+1. Configuring the OAuth app with additional scopes
+2. Granting permission to generate database credentials on behalf of users
+3. OBO tokens currently lack these permissions
 
 ## Troubleshooting
 
