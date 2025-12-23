@@ -114,6 +114,24 @@ The frontend lives in `src/lpt_event/ui/` and follows this organization:
   - Connection pool with 45-minute recycle time
 - Development: Set `LPT_EVENT_DB__INSTANCE_NAME=sqlite-memory` for in-memory SQLite
 
+### On-Behalf-Of (OBO) Authentication
+
+The application implements on-behalf-of user authentication for database connections when deployed on Databricks:
+
+- **dependencies.py**: Contains `get_obo_session()` dependency
+  - Extracts OBO token from `X-Forwarded-Access-Token` header
+  - Creates per-request WorkspaceClient with user's token
+  - Generates database credentials for the authenticated user
+  - Creates a short-lived database session scoped to the user's identity
+- **router.py**: All event endpoints use `Depends(get_obo_session)` instead of `Depends(get_session)`
+- **Local Development**: Falls back to default session when no OBO token is present or when using SQLite
+
+This ensures:
+- ✓ Proper audit trails showing which user performed each operation
+- ✓ Row-level security policies enforced per user
+- ✓ Principle of least privilege (users access database with their own credentials)
+- ✓ Seamless local development experience without OBO tokens
+
 ### Build and Deployment
 
 - `uv run apx build` creates the production bundle in `.build/`

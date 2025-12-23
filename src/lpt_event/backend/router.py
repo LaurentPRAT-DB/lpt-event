@@ -7,15 +7,9 @@ from databricks.sdk.service.iam import User as UserOut
 
 from .config import conf
 from .models import Event, EventCreate, EventRead, EventUpdate, VersionOut
-from .runtime import rt
+from .dependencies import get_obo_session
 
 api = APIRouter(prefix=conf.api_prefix)
-
-
-def get_session():
-    """Provide a SQLModel session for request scope."""
-    with rt.get_session() as session:
-        yield session
 
 
 @api.get("/version", response_model=VersionOut, operation_id="version")
@@ -46,7 +40,7 @@ def me_mock() -> UserOut:
 
 
 @api.get("/events", response_model=List[EventRead], operation_id="listEvents")
-def list_events(session: Annotated[Session, Depends(get_session)]):
+def list_events(session: Annotated[Session, Depends(get_obo_session)]):
     """List all events.
 
     Initially this will return whatever is in the database; seeding of mock data
@@ -59,7 +53,7 @@ def list_events(session: Annotated[Session, Depends(get_session)]):
 @api.post("/events", response_model=EventRead, operation_id="createEvent")
 def create_event(
     payload: EventCreate,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[Session, Depends(get_obo_session)],
 ):
     """Create a new event."""
     # Convert HttpUrl to string for database storage
@@ -75,7 +69,7 @@ def create_event(
 @api.get("/events/{event_id}", response_model=EventRead, operation_id="getEvent")
 def get_event(
     event_id: int,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[Session, Depends(get_obo_session)],
 ):
     """Fetch a single event by id."""
     event = session.get(Event, event_id)
@@ -90,7 +84,7 @@ def get_event(
 def update_event(
     event_id: int,
     payload: EventUpdate,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[Session, Depends(get_obo_session)],
 ):
     """Update an existing event."""
     from fastapi import HTTPException
@@ -117,7 +111,7 @@ def update_event(
 @api.delete("/events/{event_id}", operation_id="deleteEvent")
 def delete_event(
     event_id: int,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[Session, Depends(get_obo_session)],
 ):
     """Delete an event by id."""
     from fastapi import HTTPException
