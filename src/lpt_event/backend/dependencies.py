@@ -133,9 +133,11 @@ def get_obo_session(
         connect_args={"sslmode": "require"},
     )
 
-    # Generate database credentials for this OBO user
+    # Generate database credentials using the service principal
+    # (OBO tokens don't have permission to generate database credentials)
+    # The username in the connection string ensures the user connects as themselves
     def _before_connect(dialect, conn_rec, cargs, cparams):
-        cred = obo_ws.database.generate_database_credential(
+        cred = rt.ws.database.generate_database_credential(
             instance_names=[conf.db.instance_name]
         )
         cparams["password"] = cred.token
