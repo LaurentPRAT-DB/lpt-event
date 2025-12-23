@@ -15,17 +15,6 @@ resources:
       name: "lpt-event"
       description: "LPT Event Management Application"
       source_code_path: ./.build
-      resources:
-        - name: "db"
-          database:
-            database_name: "databricks_postgres"
-            instance_name: "LPT-LKB-2"
-            permission: "CAN_CONNECT_AND_CREATE"
-
-  database_instances:
-    lpt-event-db:
-      name: "LPT-LKB-2"
-      capacity: "CU_1"
 
 
 

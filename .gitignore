@@ -94,4 +94,4 @@ src/lpt_event/__dist__/
 # Test scripts (optional - uncomment if you don't want to commit)
 # test_*.py
 # list_*.py
-# verify_*.py
+# verify_*.pygrant_db_*.py

@@ -1,1 +1,9 @@
 command: ["uvicorn", "lpt_event.backend.app:app", "--workers", "2"]
+
+env:
+  - name: "LPT_EVENT_DB__INSTANCE_NAME"
+    value: "LPT-LKB-2"
+  - name: "LPT_EVENT_DB__PORT"
+    value: "5432"
+  - name: "LPT_EVENT_DB__DATABASE_NAME"
+    value: "databricks_postgres"
