@@ -70,8 +70,9 @@ def get_obo_session(
     logger.debug("Creating OBO database session")
     obo_ws = WorkspaceClient(token=token, auth_type="pat")
 
-    # Get the database instance details
-    instance = obo_ws.database.get_database_instance(conf.db.instance_name)
+    # Use the service principal's workspace client to get database instance details
+    # (user tokens don't have permission to read database instance metadata)
+    instance = rt.ws.database.get_database_instance(conf.db.instance_name)
 
     # Build the engine URL with the OBO user's identity
     prefix = "postgresql+psycopg"
