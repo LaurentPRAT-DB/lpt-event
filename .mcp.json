@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": [
+        "@upstash/context7-mcp"
+      ],
+      "env": {
+        "CLIENT_IP_ENCRYPTION_KEY": "${CONTEXT7_ENCRYPTION_KEY:-default-key-change-in-production}"
+      }
+    }
+  }
+}
