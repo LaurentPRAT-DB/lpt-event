@@ -41,13 +41,21 @@ class Runtime:
         ):
             # Shared in-memory SQLite for local play and mocking
             # Using file::memory:?cache=shared ensures all connections see the same database
+            # The 'uri=true' parameter is required when using the file: URI syntax
             return "sqlite:///file::memory:?cache=shared&uri=true"
 
+        # For production: Get Databricks Postgres instance details
         instance = self.ws.database.get_database_instance(self.config.db.instance_name)
+
+        # Use psycopg (version 3) driver for better performance and async support
         prefix = "postgresql+psycopg"
         host = instance.read_write_dns
         port = self.config.db.port
         database = self.config.db.database_name
+
+        # Username is either the service principal client_id or the current user's email
+        # Password is omitted here and will be injected via _before_connect callback
+        # This allows for dynamic credential generation per connection attempt
         username = (
             self.ws.config.client_id
             if self.ws.config.client_id
@@ -56,9 +64,22 @@ class Runtime:
         return f"{prefix}://{username}:@{host}:{port}/{database}"
 
     def _before_connect(self, dialect, conn_rec, cargs, cparams):
+        """
+        SQLAlchemy connection event callback to inject fresh database credentials.
+
+        This callback runs before each database connection is established.
+        For Databricks Postgres, we generate short-lived credentials dynamically
+        rather than using a static password. This improves security by:
+        1. Ensuring credentials are always fresh (not expired)
+        2. Enabling credential rotation without app restart
+        3. Supporting different credential scopes per connection if needed
+        """
         if self.engine_url.startswith("sqlite"):
+            # SQLite doesn't need authentication
             return
 
+        # Generate a fresh token-based credential for Databricks Postgres
+        # This token typically has a TTL of 1 hour
         cred = self.ws.database.generate_database_credential(
             instance_names=[self.config.db.instance_name]
         )
@@ -67,18 +88,24 @@ class Runtime:
     @cached_property
     def engine(self) -> Engine:
         if self.engine_url.startswith("sqlite"):
+            # SQLite configuration for local development
             engine = create_engine(
                 self.engine_url,
-                connect_args={"check_same_thread": False, "uri": True},
-                poolclass=StaticPool,  # Use StaticPool to maintain a single connection
+                connect_args={
+                    "check_same_thread": False,  # Allow SQLite to be used across threads (FastAPI uses thread pool)
+                    "uri": True  # Enable URI syntax for file::memory: path
+                },
+                poolclass=StaticPool,  # Use StaticPool to maintain a single in-memory connection
             )
         else:
+            # Databricks Postgres configuration for production
             engine = create_engine(
                 self.engine_url,
-                pool_recycle=45 * 60,
-                connect_args={"sslmode": "require"},
-                pool_size=4,
-            )  # 45 minutes
+                pool_recycle=45 * 60,  # Recycle connections after 45 minutes to avoid stale credentials
+                connect_args={"sslmode": "require"},  # Enforce SSL for security
+                pool_size=4,  # Limit connection pool size to avoid overwhelming the database
+            )
+            # Register callback to inject fresh credentials before each connection
             event.listens_for(engine, "do_connect")(self._before_connect)
         return engine
 
@@ -120,14 +147,18 @@ class Runtime:
         from .models import Event  # local import to avoid circularity
 
         logger.info("Initializing database models")
+        # Create all tables defined via SQLModel metadata
+        # This is idempotent - it won't fail if tables already exist
         SQLModel.metadata.create_all(self.engine)
 
-        # Seed a few demo events if none exist yet
+        # Seed demo data only on first run to avoid duplicates
+        # This is helpful for quick local testing and demos
         with self.get_session() as session:
             # Use SQLModel query instead of raw SQL to check if table is empty
             from sqlmodel import select
             existing_events = session.exec(select(Event)).first()
             if existing_events is None:
+                # Table is empty - seed with demo data
                 logger.info("Seeding mock events data")
                 from datetime import datetime
 

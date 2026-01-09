@@ -18,6 +18,11 @@ class VersionOut(BaseModel):
 #
 # We separate the SQLModel table (which needs SQLAlchemy-friendly field types)
 # from the Pydantic I/O models (which can use richer types like HttpUrl).
+#
+# This separation allows us to:
+# 1. Use Pydantic's rich validation types (HttpUrl) in API payloads
+# 2. Keep database schema simple with basic SQLAlchemy-compatible types
+# 3. Validate input at API boundaries while storing efficiently in database
 
 
 class EventBase(SQLModel):
@@ -27,24 +32,39 @@ class EventBase(SQLModel):
     short_description: str = Field(description="Short teaser description")
     detailed_description: str = Field(description="Full event description")
     city: str = Field(index=True, description="City where the event takes place")
+
+    # Store list as JSON in database rather than creating a separate table
+    # This is acceptable because days_of_week has a fixed small size and no complex queries
     days_of_week: List[str] = Field(
         default_factory=list,
-        sa_column=Column(JSON),
+        sa_column=Column(JSON),  # Use SQLAlchemy's JSON column type
         description="One or multiple days of the week (e.g. ['Monday', 'Wednesday'])",
     )
-    cost_usd: float = Field(description="Cost of the event in USD", ge=0)
-    # Stored as a plain string in the database to avoid SQLAlchemy type issues.
+
+    cost_usd: float = Field(description="Cost of the event in USD", ge=0)  # ge=0 ensures non-negative values
+
+    # Stored as a plain string in the database to avoid SQLAlchemy type issues with URLs
+    # API models use HttpUrl type for validation, then convert to string for storage
     picture_url: str = Field(description="URL of the event picture")
 
 
 class Event(EventBase, table=True):
-    """SQLModel table for events."""
+    """
+    SQLModel table for events stored in the database.
+
+    The table=True parameter tells SQLModel to create a database table for this class.
+    """
 
     id: int | None = Field(default=None, primary_key=True)
 
 
 class EventCreate(BaseModel):
-    """Payload for creating an event (Pydantic, with URL validation)."""
+    """
+    Payload for creating an event (Pydantic-only, with URL validation).
+
+    Uses pure Pydantic (not SQLModel) to leverage rich validation types like HttpUrl.
+    The HttpUrl type ensures picture_url is a valid URL format before accepting it.
+    """
 
     title: str
     short_description: str
@@ -52,11 +72,16 @@ class EventCreate(BaseModel):
     city: str
     days_of_week: List[str]
     cost_usd: float
-    picture_url: HttpUrl
+    picture_url: HttpUrl  # Pydantic validates this as a proper URL
 
 
 class EventUpdate(BaseModel):
-    """Payload for updating an event (all fields optional)."""
+    """
+    Payload for updating an event (all fields optional).
+
+    All fields are optional to support partial updates.
+    Only fields provided in the request will be updated in the database.
+    """
 
     title: str | None = None
     short_description: str | None = None
@@ -64,12 +89,18 @@ class EventUpdate(BaseModel):
     city: str | None = None
     days_of_week: List[str] | None = None
     cost_usd: float | None = None
-    picture_url: HttpUrl | None = None
+    picture_url: HttpUrl | None = None  # Validated if provided
 
 
 class EventRead(BaseModel):
-    """Payload returned to clients (includes ID)."""
+    """
+    Payload returned to clients (includes ID and database values).
 
+    This model is used to serialize Event table rows into JSON responses.
+    """
+
+    # Allow this model to be created from SQLAlchemy/SQLModel ORM objects
+    # This enables: EventRead.model_validate(event_row)
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -79,4 +110,4 @@ class EventRead(BaseModel):
     city: str
     days_of_week: List[str]
     cost_usd: float
-    picture_url: str  # Plain string for reading from database
+    picture_url: str  # Plain string (already stored as string in database)

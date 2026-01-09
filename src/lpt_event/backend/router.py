@@ -14,6 +14,7 @@ api = APIRouter(prefix=conf.api_prefix)
 
 @api.get("/version", response_model=VersionOut, operation_id="version")
 async def version():
+    """Return application version from package metadata."""
     return VersionOut.from_metadata()
 
 
@@ -22,7 +23,10 @@ def me_mock() -> UserOut:
     """
     Mocked current-user endpoint for local development.
 
-    This avoids requiring a Databricks OBO token when running the app locally.
+    In production on Databricks Apps, the APX framework provides a real
+    current-user endpoint that returns the authenticated user's information.
+    This mock allows the frontend to work seamlessly in local development
+    without requiring OAuth/OBO tokens.
     """
     return UserOut(
         id="local-user",
@@ -37,16 +41,21 @@ def me_mock() -> UserOut:
 
 
 # --- Event endpoints ---
+# All endpoints use get_obo_session for database access with user authentication
 
 
 @api.get("/events", response_model=List[EventRead], operation_id="listEvents")
 def list_events(session: Annotated[Session, Depends(get_obo_session)]):
-    """List all events.
-
-    Initially this will return whatever is in the database; seeding of mock data
-    is handled during startup.
     """
+    List all events from the database.
+
+    Returns whatever is in the database - seeding of demo data happens during startup.
+    """
+    # Query all events from the database
     events = session.exec(select(Event)).all()
+
+    # Convert ORM objects to Pydantic response models
+    # model_validate() handles the conversion from SQLModel attributes to Pydantic fields
     return [EventRead.model_validate(e) for e in events]
 
 
@@ -55,14 +64,26 @@ def create_event(
     payload: EventCreate,
     session: Annotated[Session, Depends(get_obo_session)],
 ):
-    """Create a new event."""
-    # Convert HttpUrl to string for database storage
+    """
+    Create a new event.
+
+    The payload uses Pydantic's HttpUrl for validation, but we store it as a plain string
+    in the database to avoid SQLAlchemy type complexity.
+    """
+    # Convert Pydantic model to dict
     event_data = payload.model_dump()
+
+    # Convert HttpUrl to string for database storage
+    # Pydantic's HttpUrl is a special type that doesn't play well with SQLAlchemy
     event_data['picture_url'] = str(payload.picture_url)
+
+    # Create Event table instance and persist to database
     event = Event(**event_data)
     session.add(event)
-    session.commit()
-    session.refresh(event)
+    session.commit()  # Write to database
+    session.refresh(event)  # Load back the auto-generated ID
+
+    # Convert ORM object to response model
     return EventRead.model_validate(event)
 
 
@@ -71,12 +92,18 @@ def get_event(
     event_id: int,
     session: Annotated[Session, Depends(get_obo_session)],
 ):
-    """Fetch a single event by id."""
+    """
+    Fetch a single event by ID.
+
+    Returns 404 if event doesn't exist.
+    """
+    # session.get() is the shorthand for querying by primary key
     event = session.get(Event, event_id)
+
     if not event:
         from fastapi import HTTPException
-
         raise HTTPException(status_code=404, detail="Event not found")
+
     return EventRead.model_validate(event)
 
 
@@ -86,25 +113,36 @@ def update_event(
     payload: EventUpdate,
     session: Annotated[Session, Depends(get_obo_session)],
 ):
-    """Update an existing event."""
+    """
+    Update an existing event with partial data.
+
+    Only fields provided in the payload will be updated.
+    All fields are optional in EventUpdate model.
+    """
     from fastapi import HTTPException
 
+    # First verify the event exists
     event = session.get(Event, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    # Update only provided fields
+    # Extract only the fields that were provided in the request
+    # exclude_unset=True means fields not sent in the request are ignored
+    # This enables partial updates (e.g., only updating the title)
     update_data = payload.model_dump(exclude_unset=True)
-    # Convert HttpUrl to string if present
+
+    # Convert HttpUrl to string if picture_url was provided
     if 'picture_url' in update_data and update_data['picture_url'] is not None:
         update_data['picture_url'] = str(update_data['picture_url'])
 
+    # Update each provided field on the existing event object
     for field, value in update_data.items():
         setattr(event, field, value)
 
     session.add(event)
-    session.commit()
-    session.refresh(event)
+    session.commit()  # Persist changes to database
+    session.refresh(event)  # Reload to get any database-computed fields
+
     return EventRead.model_validate(event)
 
 
@@ -113,13 +151,22 @@ def delete_event(
     event_id: int,
     session: Annotated[Session, Depends(get_obo_session)],
 ):
-    """Delete an event by id."""
+    """
+    Delete an event by ID.
+
+    Returns 404 if event doesn't exist.
+    Returns success message if deletion succeeds.
+    """
     from fastapi import HTTPException
 
+    # Verify event exists before attempting deletion
     event = session.get(Event, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
+    # Delete the event from the database
     session.delete(event)
     session.commit()
+
+    # Return success response
     return {"ok": True, "message": f"Event {event_id} deleted successfully"}
