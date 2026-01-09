@@ -6,6 +6,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.119+-green.svg)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18+-blue.svg)](https://react.dev/)
+[![License](https://img.shields.io/badge/license-Databricks-orange.svg)](LICENSE.md)
 
 ## 📋 Table of Contents
 
@@ -23,6 +24,7 @@
 - [Deployment](#-deployment)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
+- [License](#license)
 
 ## Overview
 
@@ -769,6 +771,27 @@ We welcome contributions! Please follow these guidelines:
 - Welcome newcomers and help them learn
 - Focus on constructive feedback
 - Prioritize project goals and user needs
+
+## License
+
+© 2026 Databricks, Inc. All rights reserved. The source in this project is provided subject to the [Databricks License](LICENSE.md). All included or referenced third party libraries are subject to the licenses set forth below.
+
+### Third-Party Libraries
+
+This project includes or depends on the following third-party libraries:
+
+- **FastAPI** - MIT License
+- **React** - MIT License
+- **SQLModel** - MIT License
+- **Pydantic** - MIT License
+- **TanStack Router** - MIT License
+- **TanStack Query** - MIT License
+- **shadcn/ui** - MIT License
+- **Tailwind CSS** - MIT License
+- **Vite** - MIT License
+- **APX** - Databricks License
+
+For complete license details, see [LICENSE.md](LICENSE.md).
 
 ---
 
