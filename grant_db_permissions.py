@@ -2,6 +2,7 @@
 """Grant database permissions to the lpt-event app service principal."""
 
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.catalog import PermissionsChange, Privilege
 
 # Initialize workspace client (uses DEFAULT profile)
 w = WorkspaceClient(profile="DEFAULT")
@@ -21,28 +22,26 @@ try:
         securable_type="DATABASE",
         full_name=database_instance,
         changes=[
-            {
-                "principal": sp_client_id,
-                "add": ["CONNECT", "CREATE"]
-            }
+            PermissionsChange(
+                principal=sp_client_id,
+                add=[Privilege.USAGE, Privilege.CREATE]
+            )
         ]
     )
-    print(f"✓ Granted CONNECT and CREATE permissions to service principal {sp_client_id}")
+    print(f"✓ Granted USAGE and CREATE permissions to service principal {sp_client_id}")
 except Exception as e:
     print(f"Error granting permissions: {e}")
     print("\nTrying alternative approach...")
 
     # Alternative: Use database-specific permissions if available
     try:
-        from databricks.sdk.service.catalog import PrivilegeAssignment, Privilege
-
         w.grants.update(
             securable_type="DATABASE",
             full_name=database_instance,
             changes=[
-                PrivilegeAssignment(
+                PermissionsChange(
                     principal=sp_client_id,
-                    privileges=[Privilege.ALL_PRIVILEGES]
+                    add=[Privilege.ALL_PRIVILEGES]
                 )
             ]
         )

@@ -75,14 +75,13 @@ def list_schema():
                 logger.info("─" * 80)
                 for idx in indexes:
                     idx_name = idx['name']
-                    idx_cols = ', '.join(idx['column_names'])
+                    idx_cols = ', '.join(col for col in idx['column_names'] if col is not None)
                     unique = "UNIQUE" if idx.get('unique') else ""
                     logger.info(f"  • {idx_name}: ({idx_cols}) {unique}")
 
             # Get row count
             with rt.get_session() as session:
-                result = session.exec(text(f'SELECT COUNT(*) FROM "{table_name}"')).one()
-                row_count = result[0] if result else 0
+                row_count = session.scalar(text(f'SELECT COUNT(*) FROM "{table_name}"')) or 0
                 logger.info(f"\nRow Count: {row_count}")
 
             logger.info("")
