@@ -15,10 +15,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
-  Event,
+  EventRead,
   EventCreate,
-  useCreateEventMutation,
-  useUpdateEventMutation,
+  useCreateEvent,
+  useUpdateEvent,
 } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -33,7 +33,7 @@ const DAYS_OF_WEEK = [
 ];
 
 interface EventFormDialogProps {
-  event?: Event;
+  event?: EventRead;
   trigger?: React.ReactNode;
 }
 
@@ -49,8 +49,8 @@ export function EventFormDialog({ event, trigger }: EventFormDialogProps) {
     picture_url: "",
   });
 
-  const createMutation = useCreateEventMutation();
-  const updateMutation = useUpdateEventMutation();
+  const createMutation = useCreateEvent();
+  const updateMutation = useUpdateEvent();
 
   const isEditing = !!event;
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
@@ -87,12 +87,12 @@ export function EventFormDialog({ event, trigger }: EventFormDialogProps) {
     try {
       if (isEditing) {
         await updateMutation.mutateAsync({
-          id: event.id,
+          eventId: event.id,
           data: formData,
         });
         toast.success("Event updated successfully!");
       } else {
-        await createMutation.mutateAsync(formData as EventCreate);
+        await createMutation.mutateAsync({ data: formData as EventCreate });
         toast.success("Event created successfully!");
       }
       setOpen(false);

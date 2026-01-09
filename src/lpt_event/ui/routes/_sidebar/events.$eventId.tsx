@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, CalendarDays, MapPin, DollarSign } from "lucide-react";
 
-import { useEventQuery } from "@/lib/api";
+import { useGetEvent } from "@/lib/api";
 import {
   Card,
   CardContent,
@@ -38,7 +38,7 @@ function EventDetailSkeleton() {
 
 function EventDetail() {
   const { eventId } = Route.useParams();
-  const { data, isLoading, isError } = useEventQuery(eventId);
+  const { data, isLoading, isError } = useGetEvent(parseInt(eventId));
 
   if (isLoading) {
     return <EventDetailSkeleton />;
@@ -66,7 +66,7 @@ function EventDetail() {
     );
   }
 
-  const event = data;
+  const event = data.data;
 
   return (
     <div className="space-y-6">

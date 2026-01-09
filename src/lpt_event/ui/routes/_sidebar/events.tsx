@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { CalendarDays, MapPin, DollarSign, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 
-import { useEventsQuery, useDeleteEventMutation } from "@/lib/api";
+import { useListEvents, useDeleteEvent } from "@/lib/api";
 import {
   Card,
   CardContent,
@@ -41,8 +41,8 @@ function EventsSkeleton() {
 }
 
 function EventsPage() {
-  const { data, isLoading, isError, refetch } = useEventsQuery();
-  const deleteMutation = useDeleteEventMutation();
+  const { data, isLoading, isError, refetch } = useListEvents();
+  const deleteMutation = useDeleteEvent();
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   if (isLoading) {
@@ -76,7 +76,7 @@ function EventsPage() {
 
     setDeletingId(id);
     try {
-      await deleteMutation.mutateAsync(id);
+      await deleteMutation.mutateAsync({ eventId: id });
       toast.success("Event deleted successfully!");
     } catch (error) {
       toast.error("Failed to delete event. Please try again.");
@@ -101,7 +101,7 @@ function EventsPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {data.map((event) => (
+        {data.data.map((event: any) => (
           <Card
             key={event.id}
             className="group border-primary/10 hover:border-primary/40 transition-colors"
