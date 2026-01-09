@@ -7,10 +7,29 @@ from .. import __version__
 
 
 class VersionOut(BaseModel):
+    """API version information response model.
+
+    Returns the current version of the application API, extracted from
+    the package metadata (__version__).
+
+    Attributes:
+        version (str): Semantic version string (e.g., "1.0.0").
+
+    Example:
+        >>> version_info = VersionOut.from_metadata()
+        >>> print(version_info.version)
+        1.0.0
+    """
+
     version: str
 
     @classmethod
     def from_metadata(cls):
+        """Create a VersionOut instance from package metadata.
+
+        Returns:
+            VersionOut: Version information with the current package version.
+        """
         return cls(version=__version__)
 
 
@@ -26,7 +45,34 @@ class VersionOut(BaseModel):
 
 
 class EventBase(SQLModel):
-    """Base fields shared by Event table and I/O models."""
+    """Base fields shared by Event table and I/O models.
+
+    Defines the core fields that are common across all event-related models:
+    the database table (Event), creation payload (EventCreate), update payload
+    (EventUpdate), and response model (EventRead).
+
+    This pattern separates concerns:
+    - EventBase: Shared field definitions
+    - Event (table): Database representation with ID
+    - EventCreate/EventUpdate: API request payloads with validation
+    - EventRead: API response with from_attributes support
+
+    Attributes:
+        title (str): Short, descriptive event title (indexed for search).
+        short_description (str): Brief teaser description for event listings.
+        detailed_description (str): Full event description with all details.
+        city (str): City where the event takes place (indexed for filtering).
+        days_of_week (List[str]): Days when the event occurs (e.g., ["Monday", "Wednesday"]).
+            Stored as JSON in database to avoid separate table.
+        cost_usd (float): Event cost in USD. Must be non-negative (ge=0).
+        picture_url (str): URL of the event picture. Stored as string in database,
+            but validated as HttpUrl in create/update models.
+
+    Note:
+        - Fields with index=True will have database indexes created
+        - days_of_week uses JSON column type for efficient storage
+        - picture_url is a string here but HttpUrl in I/O models for validation
+    """
 
     title: str = Field(index=True, description="Short title of the event")
     short_description: str = Field(description="Short teaser description")

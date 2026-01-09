@@ -5,7 +5,33 @@ from .._metadata import app_name
 
 
 class CustomFormatter(logging.Formatter):
-    """Custom formatter that adds function/class name and uses a pipe-separated format."""
+    """Custom log formatter with colored output and pipe-separated format.
+
+    Formats log records with a structured, pipe-separated format that includes:
+    - Timestamp with milliseconds
+    - Application name
+    - Log level (colored if terminal supports it)
+    - Abbreviated module.function location (max 20 chars)
+    - Log message
+    - Exception traceback (if present)
+
+    The formatter intelligently abbreviates long module paths and function names
+    to keep the location field within 20 characters while maintaining readability.
+
+    Format:
+        YYYY-MM-DD HH:MM:SS.mmm | app_name | LEVEL | location | message
+
+    Attributes:
+        use_colors (bool): Whether to apply ANSI color codes to log levels.
+            Colors are only applied if stderr is a TTY.
+        COLORS (dict): ANSI color codes for each log level.
+
+    Example:
+        >>> formatter = CustomFormatter(use_colors=True)
+        >>> handler.setFormatter(formatter)
+        >>> logger.info("Server started")
+        2024-01-09 10:30:45.123 | lpt-event    | INFO     | app.lifespan         | Server started
+    """
 
     # Color codes for different log levels
     COLORS = {
@@ -18,6 +44,12 @@ class CustomFormatter(logging.Formatter):
     }
 
     def __init__(self, use_colors: bool = True):
+        """Initialize the custom formatter.
+
+        Args:
+            use_colors (bool): Whether to use colored output. Defaults to True.
+                Colors are only applied if stderr is a TTY (terminal).
+        """
         super().__init__()
         self.use_colors = use_colors
 
@@ -72,7 +104,28 @@ class CustomFormatter(logging.Formatter):
         return location
 
     def format(self, record: logging.LogRecord) -> str:
-        """Format the log record with custom formatting."""
+        """Format a log record into a pipe-separated string with colors.
+
+        Transforms a LogRecord into a human-readable, structured log line with:
+        - Timestamp with millisecond precision
+        - Application name (padded to 12 chars)
+        - Colored log level (padded to 8 chars)
+        - Abbreviated module.function location (max 20 chars)
+        - Log message
+        - Exception traceback (if exception info is present)
+
+        Args:
+            record (logging.LogRecord): The log record to format.
+
+        Returns:
+            str: Formatted log line with pipe separators and optional colors.
+
+        Example:
+            >>> record = logging.LogRecord(...)
+            >>> formatted = formatter.format(record)
+            >>> print(formatted)
+            2024-01-09 10:30:45.123 | lpt-event    | INFO     | runtime.validate_db  | Database validated
+        """
         # Get the time with milliseconds
         timestamp = self.formatTime(record, "%Y-%m-%d %H:%M:%S")
         # Add milliseconds

@@ -18,22 +18,78 @@ from .logger import logger
 
 
 class Runtime:
+    """Runtime environment manager for database connections and initialization.
+
+    This class provides a centralized way to manage database connectivity and
+    initialization logic. It supports both Databricks Postgres (production) and
+    SQLite (local development) backends, dynamically selecting the appropriate
+    configuration based on environment settings.
+
+    The Runtime class uses cached properties to ensure expensive operations like
+    database credential generation and connection pool creation happen only once
+    per application lifecycle.
+
+    Attributes:
+        config (AppConfig): Application configuration loaded from environment variables.
+
+    Example:
+        >>> rt = Runtime()
+        >>> rt.validate_db()  # Check database connectivity
+        >>> rt.initialize_models()  # Create tables and seed data
+        >>> session = rt.get_session()  # Get a database session
+    """
+
     def __init__(self):
+        """Initialize the Runtime with application configuration."""
         self.config: AppConfig = conf
 
     @cached_property
     def ws(self) -> WorkspaceClient:
+        """Get Databricks Workspace client for API operations.
+
+        Creates a WorkspaceClient using default authentication. In production,
+        this typically authenticates as a service principal. In development,
+        it uses the DATABRICKS_CONFIG_PROFILE environment variable or
+        ~/.databrickscfg configuration.
+
+        The client is cached, so it's only created once per Runtime instance.
+
+        Returns:
+            WorkspaceClient: Authenticated Databricks SDK client.
+
+        Note:
+            This is usually a service principal (SP) client in production,
+            and uses the configured profile in development.
+        """
         # note - this workspace client is usually an SP-based client
         # in development it usually uses the DATABRICKS_CONFIG_PROFILE
         return WorkspaceClient()
 
     @cached_property
     def engine_url(self) -> str:
-        """
-        Build the SQLAlchemy engine URL.
+        """Build the SQLAlchemy database connection URL.
 
-        For local/mock development, you can set the DB instance name to
-        ``sqlite-memory`` to use an in-memory SQLite DB instead.
+        Constructs the appropriate database URL based on configuration. Supports
+        two backends:
+
+        1. SQLite (development): Set LPT_EVENT_DB__INSTANCE_NAME=sqlite-memory
+        2. Databricks Postgres (production): Uses configured instance name
+
+        For Databricks Postgres, the URL includes:
+        - Host: Read-write DNS from database instance
+        - Port: Configured port (default 5432)
+        - Database: Configured database name
+        - Username: Service principal client_id or current user
+        - Password: Omitted (injected dynamically via _before_connect)
+
+        Returns:
+            str: SQLAlchemy connection string in the format:
+                - SQLite: "sqlite:///file::memory:?cache=shared&uri=true"
+                - Postgres: "postgresql+psycopg://username:@host:port/database"
+
+        Note:
+            For local/mock development, set the DB instance name to
+            ``sqlite-memory`` to use an in-memory SQLite DB instead of Postgres.
         """
         if (
             isinstance(self.config.db.instance_name, str)
@@ -110,10 +166,42 @@ class Runtime:
         return engine
 
     def get_session(self) -> Session:
+        """Create a new database session.
+
+        Creates a SQLModel Session bound to the database engine. The session
+        should be used as a context manager to ensure proper cleanup.
+
+        Returns:
+            Session: A new SQLModel session for database operations.
+
+        Example:
+            >>> with rt.get_session() as session:
+            ...     events = session.exec(select(Event)).all()
+
+        Note:
+            For API endpoints, use the get_session or get_obo_session dependency
+            instead of calling this directly.
+        """
         return Session(self.engine)
 
     def validate_db(self) -> None:
-        """Validate DB connectivity, skipping heavy checks for local SQLite."""
+        """Validate database connectivity before accepting requests.
+
+        Performs validation checks appropriate for the database backend:
+
+        - SQLite: Just logs that in-memory database is being used
+        - Databricks Postgres: Verifies instance exists and connection works
+
+        This method is called during application startup (in the lifespan handler)
+        to fail fast if database configuration is incorrect.
+
+        Raises:
+            ValueError: If the database instance doesn't exist.
+            ConnectionError: If unable to establish a database connection.
+
+        Note:
+            Heavy checks are skipped for SQLite to speed up local development.
+        """
         if self.engine_url.startswith("sqlite"):
             logger.info("Using in-memory SQLite database for local development")
             return
@@ -143,7 +231,24 @@ class Runtime:
         )
 
     def initialize_models(self) -> None:
-        """Create tables and seed some mock data for development."""
+        """Create database tables and seed demo data.
+
+        Performs two operations:
+        1. Creates all database tables defined in SQLModel metadata (idempotent)
+        2. Seeds demo event data if the events table is empty
+
+        This method is safe to call multiple times - existing tables won't be
+        recreated and demo data is only inserted on first run.
+
+        The demo data includes three sample events:
+        - Data & AI Meetup (San Francisco, free)
+        - Weekend Hackathon (New York, $49)
+        - Analytics Workshop (London, $199)
+
+        Note:
+            Called during application startup in the lifespan handler.
+            Uses SQLModel.metadata.create_all() which is idempotent.
+        """
         from .models import Event  # local import to avoid circularity
 
         logger.info("Initializing database models")

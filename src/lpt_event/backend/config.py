@@ -19,6 +19,38 @@ if env_file.exists():
 
 
 class DatabaseConfig(BaseModel):
+    """Database connection configuration.
+
+    Configures the connection parameters for the database backend. Supports both
+    Databricks Postgres (production) and SQLite (development).
+
+    For Databricks Postgres:
+    - Set instance_name to your database instance (e.g., "LPT-LKB-2")
+    - Port defaults to 5432 (standard PostgreSQL)
+    - Database name defaults to "databricks_postgres"
+
+    For SQLite (local development):
+    - Set instance_name to "sqlite-memory" for in-memory database
+    - Port and database_name are ignored for SQLite
+
+    Attributes:
+        port (int): Database port number. Defaults to 5432.
+        database_name (str): Name of the database to connect to.
+            Defaults to "databricks_postgres".
+        instance_name (str): Database instance identifier. Use "sqlite-memory"
+            for local development with SQLite, or the Databricks instance name
+            for production (e.g., "LPT-LKB-2").
+
+    Example:
+        Environment variables for Databricks Postgres:
+        >>> # LPT_EVENT_DB__INSTANCE_NAME=LPT-LKB-2
+        >>> # LPT_EVENT_DB__PORT=5432
+        >>> # LPT_EVENT_DB__DATABASE_NAME=databricks_postgres
+
+        Environment variables for SQLite:
+        >>> # LPT_EVENT_DB__INSTANCE_NAME=sqlite-memory
+    """
+
     port: int = Field(description="The port of the database", default=5432)
     database_name: str = Field(
         description="The name of the database", default="databricks_postgres"
